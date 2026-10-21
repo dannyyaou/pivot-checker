@@ -186,9 +186,8 @@ export default async function handler(req, res) {
   const truncated = docText.length > MAX_TEXT_CHARS;
   if (truncated) docText = docText.slice(0, MAX_TEXT_CHARS);
 
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey)
-    return res.status(500).json({ error: "not_configured" });
+  const apiKey = (process.env.OPENAI_API_KEY || "").trim();
+  if (!apiKey) return res.status(500).json({ error: "not_configured" });
 
   let aiRes;
   try {
@@ -215,10 +214,15 @@ export default async function handler(req, res) {
         ],
       }),
     });
-  } catch {
+  } catch (e) {
+    console.error("openai upstream network error:", String(e && e.message || e));
     return res.status(502).json({ error: "ai_unavailable" });
   }
-  if (!aiRes.ok) return res.status(502).json({ error: "ai_unavailable" });
+  if (!aiRes.ok) {
+    const snippet = (await aiRes.text().catch(() => "")).slice(0, 300);
+    console.error("openai upstream rejected:", aiRes.status, snippet);
+    return res.status(502).json({ error: "ai_unavailable" });
+  }
 
   let result;
   try {
